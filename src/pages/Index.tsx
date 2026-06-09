@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+type ViewerType = "fan" | "toxic" | "spammer" | "normie";
+
 interface ChatMessage {
   id: number;
   user: string;
@@ -9,6 +11,7 @@ interface ChatMessage {
   color: string;
   banned?: boolean;
   isReaction?: "suck" | "lay";
+  viewerType?: ViewerType;
 }
 
 interface FloatEmoji {
@@ -41,29 +44,96 @@ const CHAT_COLORS = [
   "#FF6347", "#40E0D0", "#EE82EE", "#F0E68C",
 ];
 
-const CHAT_USERS = [
-  "Хомяк_007", "papich_fan", "Banya_kek", "strimkek",
-  "Dusha_Kompanii", "ZakatyChet", "lol_viewer", "knyazok",
-  "BorisBritva", "vezdehod99", "ChatFriend", "Govnokomment",
-  "SosatPapich", "DonPedro", "HypeTrainer", "ProPlayer2006",
-  "StreamSniper", "NeLezNaSosnu", "NeSpuchi", "DedMoroz",
+// ─── Типы зрителей ────────────────────────────────────────────────────────────
+interface ViewerProfile {
+  name: string;
+  type: ViewerType;
+  color: string;
+}
+
+const VIEWERS: ViewerProfile[] = [
+  // Фанаты 💛
+  { name: "papich_fan", type: "fan", color: "#FFD700" },
+  { name: "SosatPapich", type: "fan", color: "#FFD700" },
+  { name: "HypeTrainer", type: "fan", color: "#F0E68C" },
+  { name: "Dusha_Kompanii", type: "fan", color: "#FFD700" },
+  { name: "БратанПапича", type: "fan", color: "#FFB347" },
+  { name: "KingPapich", type: "fan", color: "#FFD700" },
+  { name: "PapichArmy", type: "fan", color: "#FFA500" },
+  { name: "ЛучшийЧат", type: "fan", color: "#F0E68C" },
+
+  // Токсики 🔴
+  { name: "Govnokomment", type: "toxic", color: "#FF4444" },
+  { name: "StreamSniper", type: "toxic", color: "#FF6347" },
+  { name: "ХейтерБро", type: "toxic", color: "#FF4444" },
+  { name: "ТоксикGG", type: "toxic", color: "#FF0000" },
+  { name: "НубНубНуб", type: "toxic", color: "#FF4444" },
+  { name: "КринжПатруль", type: "toxic", color: "#FF6347" },
+
+  // Спамеры 🟣
+  { name: "Хомяк_007", type: "spammer", color: "#DA70D6" },
+  { name: "strimkek", type: "spammer", color: "#EE82EE" },
+  { name: "СпамМастер", type: "spammer", color: "#DA70D6" },
+  { name: "CopyPaste228", type: "spammer", color: "#FF69B4" },
+  { name: "КнопкаF", type: "spammer", color: "#DA70D6" },
+
+  // Нормики 🔵
+  { name: "Banya_kek", type: "normie", color: "#6495ED" },
+  { name: "ZakatyChet", type: "normie", color: "#00CED1" },
+  { name: "vezdehod99", type: "normie", color: "#40E0D0" },
+  { name: "BorisBritva", type: "normie", color: "#6495ED" },
+  { name: "DonPedro", type: "normie", color: "#7CFC00" },
+  { name: "ProPlayer2006", type: "normie", color: "#6495ED" },
+  { name: "lol_viewer", type: "normie", color: "#00CED1" },
+  { name: "NeSpuchi", type: "normie", color: "#40E0D0" },
+  { name: "DedMoroz", type: "normie", color: "#6495ED" },
 ];
 
-const CHAT_PHRASES = [
-  "папич САСАААТЬ", "ну ты и лежааать", "чат, какой сос?",
-  "папич лучший стример", "ха-ха коллеги бесят да",
-  "стрим 10/10", "где донат", "покажи монитор",
-  "я тоже в офисе умираю братан", "sos sos sos",
-  "боссу привет передай", "ЛЕЖАААТЬ", "кто в чате?",
-  "папич король", "когда конец рабочего дня",
-  "я написал баг репорт на твоего босса",
-  "Лежать или Сасать? голосуем", "чат мертвый",
-  "ТЫ ЛУЧШИЙ ПАПИЧ", "держись брат", "ofis kek",
-  "папич а ты сегодня ел", "стресс по чартам растет",
-  "бро не умирай", "ты чо такой серьезный",
-  "выходи уже", "заказ кофе +5 к жизни",
-  "коллега раздражает лол", "начальник злой сегодня?",
-];
+const PHRASES_BY_TYPE: Record<ViewerType, string[]> = {
+  fan: [
+    "папич ты ЛУЧШИЙ 🙏", "люблю тебя папич", "стрим 10/10 братан",
+    "ПАПИЧ КОРОЛЬ СТРИМОВ", "держись бро мы с тобой",
+    "ты вдохновляешь меня каждый день", "папич легенда ру стриминга",
+    "с 2014 года смотрю, не перестаю восхищаться",
+    "папич не умирай пожалуйста 🙏", "чат, поддержите папича!",
+    "ты справишься с любым офисом", "ПАПИЧ ГГ ГГ ГГ",
+    "мой кумир, мой ориентир", "ВСЁ БУДЕТ ХОРОШО ПАПИЧ",
+    "донатю от всей души 💛", "папич, ты моя мотивация идти на работу",
+  ],
+  toxic: [
+    "СКУЧНЫЙ СТРИМ ИДИ ДОМОЙ", "когда уже уволишься кринж",
+    "другие стримеры лучше", "зачем ты вообще стримишь",
+    "НУБ НЕ УМЕЕТ РАБОТАТЬ ХАХАХА", "слабак, я бы не сломался",
+    "чат топ, стример дно", "ну и треш этот офис",
+    "когда это наконец закончится...", "F F F F F",
+    "папич ты проиграл жизнь", "иди работай нормально",
+    "кто это вообще смотрит lol", "ПОЗОР ПОЗОР ПОЗОР",
+    "скип скип скип", "выключай стрим плиз",
+  ],
+  spammer: [
+    "👄👄👄👄👄👄👄", "😴😴😴😴😴😴",
+    "ГГ ГГ ГГ ГГ ГГ ГГ", "ААААААААААААААААА",
+    "sos sos sos sos sos", "F F F F F F F F",
+    "папич папич папич папич", "!!!!!!!!!!!!!!!",
+    "кто в чате кто в чате кто в чате", "лол лол лол лол",
+    "СПАМ СПАМ СПАМ 📨", "👁️👁️👁️👁️👁️👁️",
+    "ЧАТ ЧАТ ЧАТ ЧАТ ЧАТ", "кек кек кек кек кек",
+    "7777777777777", "ПОГНАААААААААЛИ",
+  ],
+  normie: [
+    "чат, какой сос?", "я тоже в офисе умираю братан",
+    "боссу привет передай 😂", "кто в чате?",
+    "когда конец рабочего дня", "я написал баг репорт на твоего босса",
+    "Лежать или Сасать? голосуем", "папич а ты сегодня ел",
+    "стресс по чартам растет lol", "бро не умирай",
+    "заказ кофе +5 к жизни", "коллега раздражает лол",
+    "начальник злой сегодня?", "ха-ха коллеги бесят да",
+    "я тоже так страдаю на работе", "дожить до пятницы...",
+    "ofis kek", "показывай рабочий стол",
+    "покажи монитор папич", "где донат кнопка",
+    "стрим топ, работа дно", "ты чо такой серьезный",
+  ],
+};
 
 // Реакции чата на «Сасать»
 const CHAT_REACTIONS_SUCK = [
@@ -235,17 +305,27 @@ function ViewerCounter({ bannedCount }: { bannedCount: number }) {
   );
 }
 
+// Иконка типа зрителя
+const VIEWER_TYPE_BADGE: Record<ViewerType, { icon: string; title: string }> = {
+  fan:     { icon: "💛", title: "Фанат" },
+  toxic:   { icon: "☠️", title: "Токсик" },
+  spammer: { icon: "📨", title: "Спамер" },
+  normie:  { icon: "👤", title: "Нормик" },
+};
+
 // ─── ChatPanel ────────────────────────────────────────────────────────────────
 function ChatPanel({
   messages,
   bannedUsers,
   onBan,
   bannedCount,
+  lastBannedId,
 }: {
   messages: ChatMessage[];
   bannedUsers: Set<string>;
   onBan: (user: string) => void;
   bannedCount: number;
+  lastBannedId?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -271,22 +351,33 @@ function ChatPanel({
         className="flex-1 overflow-y-auto chat-scroll px-2 py-2 space-y-1"
       >
         {messages.map((msg) => {
+          const isBanned = bannedUsers.has(msg.user);
+          const isJustBanned = msg.id === lastBannedId;
           const reactionClass = msg.isReaction === "suck"
             ? "chat-reaction"
             : msg.isReaction === "lay"
             ? "chat-reaction-lay"
             : "";
+          const badge = msg.viewerType ? VIEWER_TYPE_BADGE[msg.viewerType] : null;
+
           return (
             <div
               key={msg.id}
-              className={`animate-chat-in flex items-start gap-1.5 group rounded px-1.5 py-0.5 transition-colors ${reactionClass} ${
-                bannedUsers.has(msg.user)
-                  ? "opacity-30 line-through"
+              className={`animate-chat-in flex items-start gap-1.5 group rounded px-1.5 py-0.5 transition-all duration-300 ${reactionClass} ${
+                isBanned
+                  ? "opacity-20 line-through scale-95"
+                  : isJustBanned
+                  ? "bg-red-900/40 border border-red-600/40"
                   : msg.isReaction
                   ? ""
                   : "hover:bg-white/5"
               }`}
             >
+              {badge && !msg.isReaction && (
+                <span className="text-[9px] shrink-0 mt-0.5 opacity-60" title={badge.title}>
+                  {badge.icon}
+                </span>
+              )}
               <span
                 className={`text-xs font-bold shrink-0 mt-0.5 ${msg.isReaction ? "font-oswald" : ""}`}
                 style={{ color: msg.color }}
@@ -296,14 +387,17 @@ function ChatPanel({
               <span className={`text-xs flex-1 leading-relaxed break-all ${msg.isReaction ? "text-foreground font-medium" : "text-foreground/85"}`}>
                 {msg.text}
               </span>
-              {!bannedUsers.has(msg.user) && (
+              {!isBanned && (
                 <button
                   onClick={() => onBan(msg.user)}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500/70 hover:text-red-400 ml-1"
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500/70 hover:text-red-500 hover:scale-110 ml-1"
                   title="Забанить"
                 >
-                  <Icon name="Ban" size={11} />
+                  🔨
                 </button>
+              )}
+              {isBanned && (
+                <span className="shrink-0 text-[10px] text-red-600/60 ml-1">БАН</span>
               )}
             </div>
           );
@@ -323,6 +417,7 @@ function LaptopScreen({
   isLayActive,
   isSuckActive,
   bannedCount,
+  lastBannedId,
 }: {
   messages: ChatMessage[];
   bannedUsers: Set<string>;
@@ -332,7 +427,19 @@ function LaptopScreen({
   isLayActive: boolean;
   isSuckActive: boolean;
   bannedCount: number;
+  lastBannedId?: number;
 }) {
+  // Бан последнего сообщения в чате от не-забаненного
+  const lastBannable = [...messages].reverse().find((m) => !bannedUsers.has(m.user));
+  const [banFlash, setBanFlash] = useState(false);
+
+  function handleBanBtn() {
+    if (!lastBannable) return;
+    onBan(lastBannable.user);
+    setBanFlash(true);
+    setTimeout(() => setBanFlash(false), 400);
+  }
+
   return (
     <div
       className="rounded-xl overflow-hidden border-2 border-[#1a1a2e]/80 shadow-2xl"
@@ -346,6 +453,11 @@ function LaptopScreen({
         <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
         <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
         <span className="text-xs text-white/30 ml-2 font-mono">papich_stream — чат</span>
+        {bannedCount > 0 && (
+          <span className="ml-auto text-[10px] font-oswald text-red-500/70 flex items-center gap-1">
+            🔨 {bannedCount}
+          </span>
+        )}
       </div>
 
       <div className="relative scanlines screen-flicker" style={{ height: "300px" }}>
@@ -363,30 +475,50 @@ function LaptopScreen({
               </span>
             </div>
             <div className="flex-1 px-2 pb-2 overflow-hidden">
-              <ChatPanel messages={messages} bannedUsers={bannedUsers} onBan={onBan} bannedCount={bannedCount} />
+              <ChatPanel
+                messages={messages}
+                bannedUsers={bannedUsers}
+                onBan={onBan}
+                bannedCount={bannedCount}
+                lastBannedId={lastBannedId}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-0 border-t border-border">
+      <div className="grid grid-cols-3 gap-0 border-t border-border">
         <button
           onClick={onSuck}
-          className={`relative py-3 px-4 font-oswald text-sm uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-2 border-r border-border
+          className={`relative py-3 px-2 font-oswald text-sm uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-1.5 border-r border-border
             ${isSuckActive ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-foreground"}`}
           style={isSuckActive ? { boxShadow: "0 0 20px rgba(251,189,35,0.5)" } : {}}
         >
-          <span className="text-lg">👄</span>
-          САСАТЬ
+          <span className="text-base">👄</span>
+          <span className="text-xs">САСАТЬ</span>
         </button>
         <button
           onClick={onLay}
-          className={`relative py-3 px-4 font-oswald text-sm uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-2
+          className={`relative py-3 px-2 font-oswald text-sm uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-1.5 border-r border-border
             ${isLayActive ? "bg-primary text-primary-foreground" : "bg-secondary hover:bg-secondary/80 text-foreground"}`}
           style={isLayActive ? { boxShadow: "0 0 20px rgba(251,189,35,0.5)" } : {}}
         >
-          <span className="text-lg">😴</span>
-          ЛЕЖАТЬ
+          <span className="text-base">😴</span>
+          <span className="text-xs">ЛЕЖАТЬ</span>
+        </button>
+        <button
+          onClick={handleBanBtn}
+          disabled={!lastBannable}
+          className={`relative py-3 px-2 font-oswald text-sm uppercase tracking-wider transition-all duration-150 flex items-center justify-center gap-1.5
+            ${banFlash
+              ? "bg-red-600 text-white scale-95"
+              : "bg-secondary hover:bg-red-900/60 hover:text-red-300 text-red-500/70"
+            } disabled:opacity-30`}
+          style={banFlash ? { boxShadow: "0 0 20px rgba(239,68,68,0.6)" } : {}}
+          title={lastBannable ? `Забанить ${lastBannable.user}` : "Некого банить"}
+        >
+          <span className="text-base">🔨</span>
+          <span className="text-xs">БАН</span>
         </button>
       </div>
     </div>
@@ -564,6 +696,7 @@ export default function Index() {
   const [banToast, setBanToast] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
   const [floatEmojis, setFloatEmojis] = useState<FloatEmoji[]>([]);
+  const [lastBannedId, setLastBannedId] = useState<number | undefined>();
 
   const gameRunning = screen === "game";
 
@@ -635,13 +768,15 @@ export default function Index() {
       const delay = randomInt(1000, 5000);
       setTimeout(() => {
         if (cancelled) return;
+        const viewer = randomItem(VIEWERS);
         setChatMessages((prev) => [
           ...prev.slice(-80),
           {
             id: Date.now() + Math.random(),
-            user: randomItem(CHAT_USERS),
-            text: randomItem(CHAT_PHRASES),
-            color: randomItem(CHAT_COLORS),
+            user: viewer.name,
+            text: randomItem(PHRASES_BY_TYPE[viewer.type]),
+            color: viewer.color,
+            viewerType: viewer.type,
           },
         ]);
         scheduleNext();
@@ -658,6 +793,13 @@ export default function Index() {
     setBanToast(user);
     speak(`${user} — Бан!`);
     setStress((s) => Math.max(0, s - 3));
+    // подсветить последнее сообщение этого юзера
+    setChatMessages((prev) => {
+      const last = [...prev].reverse().find((m) => m.user === user);
+      if (last) setLastBannedId(last.id);
+      return prev;
+    });
+    setTimeout(() => setLastBannedId(undefined), 800);
   }, []);
 
   // Волна реакций в чате
@@ -992,6 +1134,7 @@ export default function Index() {
               isLayActive={isLayActive}
               isSuckActive={isSuckActive}
               bannedCount={bannedCount}
+              lastBannedId={lastBannedId}
             />
           </div>
         </div>
