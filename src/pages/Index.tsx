@@ -626,23 +626,31 @@ export default function Index() {
     return () => clearTimeout(timeout);
   }, [gameRunning, difficultyMultiplier, currentEvent]);
 
-  // Chat generator
+  // Chat generator — рандомный интервал 1–5 секунд
   useEffect(() => {
     if (!gameRunning) return;
-    const interval = setInterval(
-      () => {
-        const msg: ChatMessage = {
-          id: Date.now() + Math.random(),
-          user: randomItem(CHAT_USERS),
-          text: randomItem(CHAT_PHRASES),
-          color: randomItem(CHAT_COLORS),
-        };
-        setChatMessages((prev) => [...prev.slice(-80), msg]);
-      },
-      Math.max(400, 1500 - difficultyMultiplier * 150) + randomInt(-200, 200)
-    );
-    return () => clearInterval(interval);
-  }, [gameRunning, difficultyMultiplier]);
+    let cancelled = false;
+
+    function scheduleNext() {
+      const delay = randomInt(1000, 5000);
+      setTimeout(() => {
+        if (cancelled) return;
+        setChatMessages((prev) => [
+          ...prev.slice(-80),
+          {
+            id: Date.now() + Math.random(),
+            user: randomItem(CHAT_USERS),
+            text: randomItem(CHAT_PHRASES),
+            color: randomItem(CHAT_COLORS),
+          },
+        ]);
+        scheduleNext();
+      }, delay);
+    }
+
+    scheduleNext();
+    return () => { cancelled = true; };
+  }, [gameRunning]);
 
   const handleBan = useCallback((user: string) => {
     setBannedUsers((prev) => new Set([...prev, user]));
