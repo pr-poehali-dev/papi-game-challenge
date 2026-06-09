@@ -12,6 +12,15 @@ interface ChatMessage {
   banned?: boolean;
   isReaction?: "suck" | "lay";
   viewerType?: ViewerType;
+  isDonate?: boolean;
+  donateAmount?: number;
+}
+
+interface Donate {
+  id: number;
+  user: string;
+  amount: number;
+  text: string;
 }
 
 interface FloatEmoji {
@@ -159,6 +168,24 @@ const CHAT_REACTIONS_LAY = [
   "аааааа ЛЕЖАААААААААТЬ", "ЛЕЕЕЕЕЖАТЬ",
   "папич ты лучший лежун в мире",
   "ЛЕЖАТЬ x100", "лежать.exe запущен",
+];
+
+// ─── Донаты ───────────────────────────────────────────────────────────────────
+const DONATE_AMOUNTS = [29, 49, 69, 99, 149, 199, 299, 499, 999];
+
+const DONATE_MESSAGES = [
+  "держись папич, мы с тобой! 💛",
+  "за тебя братан, не сдавайся!",
+  "папич ты лучший, вот тебе на кофе ☕",
+  "купи что-нибудь вкусное, заслужил",
+  "выживай! болеем всем чатом 🙏",
+  "папич — легенда офисного выживания",
+  "от всего сердца, держи брат ❤️",
+  "на антистресс тебе, папич",
+  "за стойкость духа 💪",
+  "ты наш герой, продержись до 18:00!",
+  "за лучший стрим недели 👑",
+  "не сдавайся, чат верит в тебя!",
 ];
 
 const OFFICE_EVENTS_POOL: Omit<OfficeEvent, "id">[] = [
@@ -368,6 +395,8 @@ function ChatPanel({
                   ? "opacity-20 line-through scale-95"
                   : isJustBanned
                   ? "bg-red-900/40 border border-red-600/40"
+                  : msg.isDonate
+                  ? "bg-yellow-500/10 border border-yellow-500/30 rounded"
                   : msg.isReaction
                   ? ""
                   : "hover:bg-white/5"
@@ -521,6 +550,41 @@ function LaptopScreen({
           <span className="text-xs">БАН</span>
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── DonateAlert ──────────────────────────────────────────────────────────────
+function DonateAlert({ donate, onClose }: { donate: Donate | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!donate) return;
+    const t = setTimeout(onClose, 4000);
+    return () => clearTimeout(t);
+  }, [donate]);
+
+  if (!donate) return null;
+
+  return (
+    <div
+      className="animate-event-pop fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl flex items-center gap-3 shadow-2xl"
+      style={{
+        background: "linear-gradient(135deg, #1a1400, #2d2200)",
+        border: "1px solid rgba(251,189,35,0.5)",
+        boxShadow: "0 0 40px rgba(251,189,35,0.35)",
+        minWidth: "300px",
+        maxWidth: "480px",
+      }}
+    >
+      <div className="text-2xl animate-bounce">💰</div>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-oswald text-yellow-400 uppercase tracking-widest">ДОНАТ</span>
+          <span className="text-sm font-oswald font-bold text-primary">{donate.amount} руб.</span>
+          <span className="text-xs text-muted-foreground font-golos">от {donate.user}</span>
+        </div>
+        <p className="text-xs text-foreground/80 font-golos mt-0.5 italic">"{donate.text}"</p>
+      </div>
+      <div className="text-xs font-oswald text-green-400">-5% стресс</div>
     </div>
   );
 }
@@ -697,6 +761,8 @@ export default function Index() {
   const [isShaking, setIsShaking] = useState(false);
   const [floatEmojis, setFloatEmojis] = useState<FloatEmoji[]>([]);
   const [lastBannedId, setLastBannedId] = useState<number | undefined>();
+  const [currentDonate, setCurrentDonate] = useState<Donate | null>(null);
+  const [totalDonated, setTotalDonated] = useState(0);
 
   const gameRunning = screen === "game";
 
@@ -787,6 +853,46 @@ export default function Index() {
     return () => { cancelled = true; };
   }, [gameRunning]);
 
+  // Генератор донатов — каждые 20–45 секунд
+  useEffect(() => {
+    if (!gameRunning) return;
+    let cancelled = false;
+
+    function scheduleDonate() {
+      const delay = randomInt(20000, 45000);
+      setTimeout(() => {
+        if (cancelled) return;
+        const fan = randomItem(VIEWERS.filter((v) => v.type === "fan"));
+        const amount = randomItem(DONATE_AMOUNTS);
+        const text = randomItem(DONATE_MESSAGES);
+        const donate: Donate = { id: Date.now(), user: fan.name, amount, text };
+
+        setCurrentDonate(donate);
+        setTotalDonated((t) => t + amount);
+        setStress((s) => Math.max(0, s - 5));
+
+        // Сообщение в чат с подсветкой
+        setChatMessages((prev) => [
+          ...prev.slice(-80),
+          {
+            id: Date.now() + 0.5,
+            user: fan.name,
+            text: `💰 ДОНАТ ${amount} руб: ${text}`,
+            color: "#FFD700",
+            viewerType: "fan" as ViewerType,
+            isDonate: true,
+            donateAmount: amount,
+          },
+        ]);
+
+        scheduleDonate();
+      }, delay);
+    }
+
+    scheduleDonate();
+    return () => { cancelled = true; };
+  }, [gameRunning]);
+
   const handleBan = useCallback((user: string) => {
     setBannedUsers((prev) => new Set([...prev, user]));
     setBannedCount((c) => c + 1);
@@ -867,6 +973,8 @@ export default function Index() {
     setIsLayActive(false);
     setIsSuckActive(false);
     setFloatEmojis([]);
+    setCurrentDonate(null);
+    setTotalDonated(0);
     setScreen("game");
   }
 
@@ -960,15 +1068,16 @@ export default function Index() {
               {formatTime(currentHourInt, currentMinutes)}
             </span>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-4 max-w-xs mx-auto">
+          <div className="mt-4 grid grid-cols-4 gap-3 max-w-sm mx-auto">
             {[
               { label: "Бан", value: bannedCount, emoji: "🔨" },
               { label: "Лежать", value: layCount, emoji: "😴" },
               { label: "Сасать", value: suckCount, emoji: "👄" },
+              { label: "Донаты", value: `${totalDonated}₽`, emoji: "💰" },
             ].map((s) => (
               <div key={s.label} className="bg-secondary/40 border border-border rounded-xl p-3 text-center">
                 <div className="text-2xl">{s.emoji}</div>
-                <div className="font-oswald text-2xl text-foreground">{s.value}</div>
+                <div className="font-oswald text-lg text-foreground">{s.value}</div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
               </div>
             ))}
@@ -1009,15 +1118,16 @@ export default function Index() {
           <p className="text-foreground/60 mt-2 font-golos">
             Папич пережил рабочий день. Офис проиграл.
           </p>
-          <div className="mt-4 grid grid-cols-3 gap-4 max-w-xs mx-auto">
+          <div className="mt-4 grid grid-cols-4 gap-3 max-w-sm mx-auto">
             {[
               { label: "Бан", value: bannedCount, emoji: "🔨" },
               { label: "Лежать", value: layCount, emoji: "😴" },
               { label: "Сасать", value: suckCount, emoji: "👄" },
+              { label: "Донаты", value: `${totalDonated}₽`, emoji: "💰" },
             ].map((s) => (
               <div key={s.label} className="bg-secondary/40 border border-border rounded-xl p-3 text-center">
                 <div className="text-2xl">{s.emoji}</div>
-                <div className="font-oswald text-2xl text-primary">{s.value}</div>
+                <div className="font-oswald text-lg text-primary">{s.value}</div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
               </div>
             ))}
@@ -1141,6 +1251,7 @@ export default function Index() {
       </div>
 
       <EventNotification event={currentEvent} onDismiss={() => setCurrentEvent(null)} />
+      <DonateAlert donate={currentDonate} onClose={() => setCurrentDonate(null)} />
       {banToast && <BanToast user={banToast} onClose={() => setBanToast(null)} />}
       <KeyboardHandler onLay={handleLay} onSuck={handleSuck} />
     </div>
