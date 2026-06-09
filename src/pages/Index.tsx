@@ -8,6 +8,13 @@ interface ChatMessage {
   text: string;
   color: string;
   banned?: boolean;
+  isReaction?: "suck" | "lay";
+}
+
+interface FloatEmoji {
+  id: number;
+  emoji: string;
+  x: number;
 }
 
 interface OfficeEvent {
@@ -56,6 +63,32 @@ const CHAT_PHRASES = [
   "бро не умирай", "ты чо такой серьезный",
   "выходи уже", "заказ кофе +5 к жизни",
   "коллега раздражает лол", "начальник злой сегодня?",
+];
+
+// Реакции чата на «Сасать»
+const CHAT_REACTIONS_SUCK = [
+  "САСАААТЬ 👄👄👄", "СОСАТЬ СОСАТЬ СОСАТЬ",
+  "САААААААААААААТЬ", "папич соси!!!",
+  "👄👄👄👄👄", "ЛЕГЕНДА СОСА",
+  "САСАААТЬ peepoHappy", "с-а-с-а-т-ь",
+  "ЧАААААТ САСАААТЬ", "сосалка активирована",
+  "👄👄👄 САААТЬ", "ЗАСАСАААААТЬ",
+  "ааааа САСАААААААААТЬ", "СООООООООС",
+  "папич ты лучший сосатель в мире",
+  "САСАТЬ x100", "сосать.exe запущен",
+];
+
+// Реакции чата на «Лежать»
+const CHAT_REACTIONS_LAY = [
+  "ЛЕЖАААТЬ 😴😴😴", "ЛЕЖАААТЬ ЛЕЖАААТЬ",
+  "ЛЕЖАААААААААААТЬ", "папич ляг!!!",
+  "😴😴😴😴😴", "ЛЕГЕНДА ЛЕЖИ",
+  "ЛЕЖАААТЬ peepoHappy", "л-е-ж-а-т-ь",
+  "ЧАААААТ ЛЕЖАААТЬ", "режим горизонтального папича",
+  "😴😴😴 ЛЕЖАААТЬ", "ЗАЛЕЖААААТЬСЯ",
+  "аааааа ЛЕЖАААААААААТЬ", "ЛЕЕЕЕЕЖАТЬ",
+  "папич ты лучший лежун в мире",
+  "ЛЕЖАТЬ x100", "лежать.exe запущен",
 ];
 
 const OFFICE_EVENTS_POOL: Omit<OfficeEvent, "id">[] = [
@@ -237,33 +270,44 @@ function ChatPanel({
         ref={scrollRef}
         className="flex-1 overflow-y-auto chat-scroll px-2 py-2 space-y-1"
       >
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`animate-chat-in flex items-start gap-1.5 group rounded px-1.5 py-0.5 hover:bg-white/5 transition-colors ${
-              bannedUsers.has(msg.user) ? "opacity-30 line-through" : ""
-            }`}
-          >
-            <span
-              className="text-xs font-bold shrink-0 mt-0.5"
-              style={{ color: msg.color }}
+        {messages.map((msg) => {
+          const reactionClass = msg.isReaction === "suck"
+            ? "chat-reaction"
+            : msg.isReaction === "lay"
+            ? "chat-reaction-lay"
+            : "";
+          return (
+            <div
+              key={msg.id}
+              className={`animate-chat-in flex items-start gap-1.5 group rounded px-1.5 py-0.5 transition-colors ${reactionClass} ${
+                bannedUsers.has(msg.user)
+                  ? "opacity-30 line-through"
+                  : msg.isReaction
+                  ? ""
+                  : "hover:bg-white/5"
+              }`}
             >
-              {msg.user}:
-            </span>
-            <span className="text-xs text-foreground/85 flex-1 leading-relaxed break-all">
-              {msg.text}
-            </span>
-            {!bannedUsers.has(msg.user) && (
-              <button
-                onClick={() => onBan(msg.user)}
-                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500/70 hover:text-red-400 ml-1"
-                title="Забанить"
+              <span
+                className={`text-xs font-bold shrink-0 mt-0.5 ${msg.isReaction ? "font-oswald" : ""}`}
+                style={{ color: msg.color }}
               >
-                <Icon name="Ban" size={11} />
-              </button>
-            )}
-          </div>
-        ))}
+                {msg.user}:
+              </span>
+              <span className={`text-xs flex-1 leading-relaxed break-all ${msg.isReaction ? "text-foreground font-medium" : "text-foreground/85"}`}>
+                {msg.text}
+              </span>
+              {!bannedUsers.has(msg.user) && (
+                <button
+                  onClick={() => onBan(msg.user)}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-red-500/70 hover:text-red-400 ml-1"
+                  title="Забанить"
+                >
+                  <Icon name="Ban" size={11} />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -456,6 +500,23 @@ function StatsPanel({
   );
 }
 
+// ─── FloatingEmojis ───────────────────────────────────────────────────────────
+function FloatingEmojis({ items }: { items: FloatEmoji[] }) {
+  return (
+    <>
+      {items.map((item) => (
+        <span
+          key={item.id}
+          className="float-emoji"
+          style={{ left: `${item.x}%` }}
+        >
+          {item.emoji}
+        </span>
+      ))}
+    </>
+  );
+}
+
 // ─── BanToast ─────────────────────────────────────────────────────────────────
 function BanToast({ user, onClose }: { user: string; onClose: () => void }) {
   useEffect(() => {
@@ -502,6 +563,7 @@ export default function Index() {
   const [isSuckActive, setIsSuckActive] = useState(false);
   const [banToast, setBanToast] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
+  const [floatEmojis, setFloatEmojis] = useState<FloatEmoji[]>([]);
 
   const gameRunning = screen === "game";
 
@@ -590,21 +652,58 @@ export default function Index() {
     setStress((s) => Math.max(0, s - 3));
   }, []);
 
+  // Волна реакций в чате
+  const triggerChatReaction = useCallback((type: "suck" | "lay") => {
+    const pool = type === "suck" ? CHAT_REACTIONS_SUCK : CHAT_REACTIONS_LAY;
+    const count = randomInt(5, 9);
+    const emojisArr = type === "suck"
+      ? ["👄", "👄", "💋", "😮", "🗣️"]
+      : ["😴", "😴", "💤", "🛌", "😪"];
+
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        setChatMessages((prev) => [
+          ...prev.slice(-80),
+          {
+            id: Date.now() + Math.random() + i,
+            user: randomItem(CHAT_USERS),
+            text: randomItem(pool),
+            color: type === "suck" ? "#FFD700" : "#6495ED",
+            isReaction: type,
+          },
+        ]);
+      }, i * 160);
+    }
+
+    // Летящие эмодзи
+    const newEmojis: FloatEmoji[] = Array.from({ length: randomInt(5, 8) }, (_, i) => ({
+      id: Date.now() + i,
+      emoji: randomItem(emojisArr),
+      x: randomInt(30, 75),
+    }));
+    setFloatEmojis((prev) => [...prev, ...newEmojis]);
+    setTimeout(() => {
+      setFloatEmojis((prev) => prev.filter((e) => !newEmojis.find((n) => n.id === e.id)));
+    }, 1800);
+  }, []);
+
   const handleLay = useCallback(() => {
     setIsLayActive(true);
     setLayCount((c) => c + 1);
     speak("Лежааать!");
     setStress((s) => Math.max(0, s - 8));
+    triggerChatReaction("lay");
     setTimeout(() => setIsLayActive(false), 1500);
-  }, []);
+  }, [triggerChatReaction]);
 
   const handleSuck = useCallback(() => {
     setIsSuckActive(true);
     setSuckCount((c) => c + 1);
     speak("Сасааать!");
     setStress((s) => Math.max(0, s - 5));
+    triggerChatReaction("suck");
     setTimeout(() => setIsSuckActive(false), 1500);
-  }, []);
+  }, [triggerChatReaction]);
 
   function startGame() {
     setStress(0);
@@ -617,6 +716,7 @@ export default function Index() {
     setCurrentEvent(null);
     setIsLayActive(false);
     setIsSuckActive(false);
+    setFloatEmojis([]);
     setScreen("game");
   }
 
@@ -872,8 +972,9 @@ export default function Index() {
             )}
           </div>
 
-          {/* Laptop */}
-          <div className="shrink-0">
+          {/* Laptop + floating emojis */}
+          <div className="shrink-0 relative">
+            <FloatingEmojis items={floatEmojis} />
             <LaptopScreen
               messages={chatMessages}
               bannedUsers={bannedUsers}

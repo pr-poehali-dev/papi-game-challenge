@@ -248,3 +248,51 @@
 .ban-flash {
   animation: ban-flash 0.6s ease-out;
 }
+
+/* Floating reaction emojis */
+@keyframes float-emoji {
+  0% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-70px) scale(1.4) rotate(8deg);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateY(-140px) scale(0.5) rotate(-5deg);
+    opacity: 0;
+  }
+}
+.float-emoji {
+  animation: float-emoji 1.6s ease-out forwards;
+  pointer-events: none;
+  position: absolute;
+  font-size: 1.8rem;
+  z-index: 60;
+  bottom: 10px;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+}
+
+/* Reaction highlight in chat */
+@keyframes reaction-glow {
+  0% {
+    background: rgba(251, 189, 35, 0);
+  }
+  25% {
+    background: rgba(251, 189, 35, 0.15);
+  }
+  100% {
+    background: rgba(251, 189, 35, 0);
+  }
+}
+.chat-reaction {
+  animation: reaction-glow 1.2s ease-out;
+  border-left: 2px solid rgba(251, 189, 35, 0.6);
+  padding-left: 4px !important;
+}
+.chat-reaction-lay {
+  animation: reaction-glow 1.2s ease-out;
+  border-left: 2px solid rgba(99, 149, 237, 0.7);
+  padding-left: 4px !important;
+}
