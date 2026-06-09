@@ -157,15 +157,62 @@ function StressBar({ stress }: { stress: number }) {
   );
 }
 
+// ─── ViewerCounter ────────────────────────────────────────────────────────────
+function ViewerCounter({ bannedCount }: { bannedCount: number }) {
+  const [viewers, setViewers] = useState(2347);
+  const [delta, setDelta] = useState<number | null>(null);
+  const [isUp, setIsUp] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const change = randomInt(-47, 83);
+      setViewers((v) => {
+        const next = Math.max(800, v + change);
+        setDelta(change);
+        setIsUp(change >= 0);
+        setTimeout(() => setDelta(null), 1200);
+        return next;
+      });
+    }, randomInt(3000, 6000));
+    return () => clearInterval(interval);
+  }, []);
+
+  // Каждый бан немного снижает зрителей
+  useEffect(() => {
+    if (bannedCount === 0) return;
+    setViewers((v) => Math.max(500, v - randomInt(3, 12)));
+    setDelta(-randomInt(3, 12));
+    setIsUp(false);
+    setTimeout(() => setDelta(null), 1200);
+  }, [bannedCount]);
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground relative">
+      <Icon name="Eye" size={12} />
+      <span className="font-oswald tabular-nums">{viewers.toLocaleString("ru-RU")}</span>
+      {delta !== null && (
+        <span
+          className="absolute -top-3 right-0 text-[10px] font-oswald font-bold animate-fade-out-up"
+          style={{ color: isUp ? "#22c55e" : "#ef4444" }}
+        >
+          {isUp ? `+${delta}` : delta}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── ChatPanel ────────────────────────────────────────────────────────────────
 function ChatPanel({
   messages,
   bannedUsers,
   onBan,
+  bannedCount,
 }: {
   messages: ChatMessage[];
   bannedUsers: Set<string>;
   onBan: (user: string) => void;
+  bannedCount: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -182,9 +229,8 @@ function ChatPanel({
         <span className="text-xs font-oswald uppercase tracking-widest text-foreground/80">
           LIVE ЧАТ
         </span>
-        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-          <Icon name="Eye" size={12} />
-          <span>{randomInt(1200, 4500).toLocaleString()}</span>
+        <div className="ml-auto">
+          <ViewerCounter bannedCount={bannedCount} />
         </div>
       </div>
       <div
@@ -232,6 +278,7 @@ function LaptopScreen({
   onSuck,
   isLayActive,
   isSuckActive,
+  bannedCount,
 }: {
   messages: ChatMessage[];
   bannedUsers: Set<string>;
@@ -240,6 +287,7 @@ function LaptopScreen({
   onSuck: () => void;
   isLayActive: boolean;
   isSuckActive: boolean;
+  bannedCount: number;
 }) {
   return (
     <div
@@ -271,7 +319,7 @@ function LaptopScreen({
               </span>
             </div>
             <div className="flex-1 px-2 pb-2 overflow-hidden">
-              <ChatPanel messages={messages} bannedUsers={bannedUsers} onBan={onBan} />
+              <ChatPanel messages={messages} bannedUsers={bannedUsers} onBan={onBan} bannedCount={bannedCount} />
             </div>
           </div>
         </div>
@@ -834,6 +882,7 @@ export default function Index() {
               onSuck={handleSuck}
               isLayActive={isLayActive}
               isSuckActive={isSuckActive}
+              bannedCount={bannedCount}
             />
           </div>
         </div>
